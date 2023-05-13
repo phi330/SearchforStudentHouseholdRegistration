@@ -1,0 +1,155 @@
+#--------------------------------第一段---------------------------------------
+%%shell
+sudo apt -y update
+sudo apt install -y wget curl unzip
+wget http://archive.ubuntu.com/ubuntu/pool/main/libu/libu2f-host/libu2f-udev_1.1.4-1_all.deb
+dpkg -i libu2f-udev_1.1.4-1_all.deb
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+dpkg -i google-chrome-stable_current_amd64.deb
+CHROME_DRIVER_VERSION=`curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE`
+wget -N https://chromedriver.storage.googleapis.com/$CHROME_DRIVER_VERSION/chromedriver_linux64.zip -P /tmp/
+unzip -o /tmp/chromedriver_linux64.zip -d /tmp/
+chmod +x /tmp/chromedriver
+mv /tmp/chromedriver /usr/local/bin/chromedriver
+pip install selenium
+
+#--------------------------------第二段--------------------------------------------
+
+!pip install xlsxwriter
+
+from selenium import webdriver
+import openpyxl
+import xlsxwriter
+import time
+from time import sleep
+
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+from google.colab import files
+from selenium.webdriver.common.keys import Keys
+import io
+import pandas as pd
+from selenium.webdriver.common.by import By
+
+URL = "https://schooldistrict.tp.edu.tw/html/search.jsp" #台北市學區查詢系統的網址
+
+options = webdriver.ChromeOptions()
+options.add_argument("--headless")
+options.add_argument('--disable-dev-shm-usage')
+options.add_argument("--no-sandbox")
+
+driver = webdriver.Chrome(
+    options=options
+)
+
+driver.implicitly_wait(2)
+
+
+ai = 0
+
+driver.get(URL)
+title = driver.title
+
+
+uploaded = files.upload()# 會在執行區跳出要上傳xlsx檔案的請求
+
+print(title)
+
+
+
+#建立一個新的空白EXCEL表
+wb = openpyxl.Workbook()            
+s1 = wb['Sheet']
+
+
+#各欄標題名稱
+s1.cell(1,1).value = "姓名"
+#s1.cell(1,2).value = "身分證字號"    #如果原本的檔案有身分證字號需要紀錄，可把本行最前面#字拿掉
+s1.cell(1,3).value = "戶籍學區學校結果1"
+s1.cell(1,4).value = "戶籍學區學校結果2"
+s1.cell(1,5).value = "戶籍學區學校結果3"
+s1.cell(1,6).value = "戶籍學區學校結果4"
+
+
+def open():
+   
+    #取得臺北市學區查詢系統網址    
+    driver.get('https://schooldistrict.tp.edu.tw/html/search.jsp')
+    search_get()
+    
+    
+def search_get():
+    address = driver.find_element(By.ID,"roadSearch") 
+    
+    #把處理好的EXCEL讀取進來,取得表所在的工作表名稱，還有預計讀取的excel表內各欄標題列名稱
+    sheet0 = pd.read_excel(io="輸入讀進來的excel檔名.xlsx", sheet_name="工作表4", usecols=["學生姓名","身分證統一編號","戶籍地址處理後"])
+    st0 = pd.DataFrame(sheet0)
+    
+    st1 = st0[["學生姓名"]]
+    #st2 = st0[["身分證統一編號"]] #如果有需要紀錄身分證字號，可把本行最前面#字拿掉
+    st3 = st0[["戶籍地址處理後"]]
+
+    a1 = 0
+    
+    for a1 in range(len(st1)):
+      
+        list1 = st0.at[a1,"學生姓名"]
+        #list2 = st0.at[a1,"身分證統一編號"] #如果有需要紀錄身分證字號，可把本行最前面#字拿掉
+        list3 = st0.at[a1,"戶籍地址處理後"]
+        
+        result_get = ""
+        result_get1 = ""
+        result_get2 = ""
+        result_get3 = ""
+        
+
+        address.send_keys(Keys.CONTROL+'a')
+        address.send_keys(Keys.BACK_SPACE)#每次搜尋前要把輸入欄位先清空
+        time.sleep(1)
+        address.send_keys(list3)#把EXCEL的戶籍地址那欄透過迴圈所在一個一個讀進去
+        identify = driver.find_element(By.ID,"roadButton")
+        identify.click()
+
+
+        time.sleep(1)
+        #TRY&EXCEPT語法,當TRY所執行的部分有ERROR,就可以直接執行EXCEPT的部分
+        try:
+             result_get = driver.find_element(By.XPATH,"//*[@class='ui-datatable-data ui-widget-content']/tr[1]/td[1]").text#找出第一間學校
+             try:
+                 result_get1 =driver.find_element(By.XPATH,"//*[@class='ui-datatable-data ui-widget-content']/tr[2]/td[1]").text                 
+             except:
+                 result_get1 = ""#找出第二間學校,如果沒有第二欄，就自動把RESULT_GET1的值設為空,下方步驟同此
+                 
+             try:
+                 result_get2 =driver.find_element(By.XPATH,"//*[@class='ui-datatable-data ui-widget-content']/tr[3]/td[1]").text                 
+             except:
+                 result_get2 = ""#找出第三間學校
+                
+             try:
+                 result_get3 =driver.find_element(By.XPATH,"//*[@class='ui-datatable-data ui-widget-content']/tr[4]/td[1]").text                 
+             except:
+                 result_get3 = ""#找出第四間學校
+                            
+             print(list1,result_get,result_get1,result_get2,result_get3)#在執行區試印出來核對，不用等到整個EXCEL跑完才知道內容是否有誤
+             
+             s1.cell(int(a1)+2,1).value = list1#姓名
+             s1.cell(int(a1)+2,3).value = result_get#第一列的學區學校
+             s1.cell(int(a1)+2,4).value = result_get1#第二列的學區學校
+             s1.cell(int(a1)+2,5).value = result_get2#第三列的學區學校
+             s1.cell(int(a1)+2,6).value = result_get3#第四列的學區學校
+ 
+
+        except:
+             s1.cell(int(a1)+2,1).value = list1#如果出錯了,就在C欄直接打XXXXX
+             s1.cell(int(a1)+2,3).value = "XXXXX"
+             print(list1,'XXXXX')
+                  
+
+        a1+=1
+
+open()
+
+wb.save('改成要輸出來的excel檔名.xlsx')#可把''內改成預計寫入的excel檔名
+
+driver.close()
